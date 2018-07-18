@@ -4,32 +4,28 @@ set -e
 
 me="$(basename "$0")"
 
-while getopts h arg; do
-    case "$arg" in
-        h)
-            echo "NAME"
-            echo "        $me - use shmig to migrate the database of a repository to the common anscestor of two refs"
-            echo
-            echo "SYNOPSIS"
-            echo "        $me [options] [from_ref] [to_ref]"
-            echo
-            echo "DESCRIPTION"
-            echo "        Finds the common database migration anscestor between [from_ref] and [to_ref] and uses shmig"
-            echo "        to migrate the database to that anscestor"
-            echo
-            echo "OPTIONS"
-            echo "        --repo-root|-r"
-            echo "            Optional. The repo in which to operate this command. If not supplied, the command moves"
-            echo "            up from the current working directory trying to find a .git directory."
-            echo
-            exit
-        ;;
-    esac
-done
-shift $(($OPTIND - 1))
+function show_usage() {
+    echo "NAME"
+    echo "        $me - use shmig to migrate the database of a repository to the common anscestor of two refs"
+    echo
+    echo "SYNOPSIS"
+    echo "        $me [options] [from_ref] [to_ref]"
+    echo
+    echo "DESCRIPTION"
+    echo "        Finds the common database migration anscestor between [from_ref] and [to_ref] and uses shmig"
+    echo "        to migrate the database to that anscestor"
+    echo
+    echo "OPTIONS"
+    echo "        --repo-root|-r"
+    echo "            Optional. The repo in which to operate this command. If not supplied, the command moves"
+    echo "            up from the current working directory trying to find a .git directory."
+    echo
+}
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --help|-h) show_usage && exit ;;
+
         --repo-root|-r)
             ROOT="$2"
             shift
@@ -51,7 +47,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 
-# Find repo root, if not given
+# Find repo root, if not given, then go to it
 if [ -z "$ROOT" ]; then
     ROOT="$PWD"
     while [ "$ROOT" != "/" ] && [ ! -e "$ROOT/.git" ]; do
@@ -63,6 +59,7 @@ if [ -z "$ROOT" ]; then
         exit 11
     fi
 fi
+cd "$ROOT"
 
 # Make sure arguments is a valid git refs
 for r in "$from_ref" "$to_ref"; do
