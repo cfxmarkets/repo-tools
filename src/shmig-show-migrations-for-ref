@@ -119,10 +119,11 @@ else
 fi
 
 # HACK: For some reason, git automatically stages "ghost" changes in the actual repo, which we need to clear
+cd "$ROOT"
 git reset &>/dev/null || true
 
 if [ "$CLEANUP" == "true" ]; then
-    rm -Rf "$TMPDIR"
+    rm -Rf "$TMPDIR" || true
 fi
 
 exit "$RET"
