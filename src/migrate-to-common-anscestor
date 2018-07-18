@@ -4,31 +4,72 @@ set -e
 
 me="$(basename "$0")"
 
-# Find repo root
-while [ "$PWD" != "/" ] && [ ! -e "$PWD/.git" ]; do
-    cd ../
+while getopts h arg; do
+    case "$arg" in
+        h)
+            echo "NAME"
+            echo "        $me - use shmig to migrate the database of a repository to the common anscestor of two refs"
+            echo
+            echo "SYNOPSIS"
+            echo "        $me [options] [from_ref] [to_ref]"
+            echo
+            echo "DESCRIPTION"
+            echo "        Finds the common database migration anscestor between [from_ref] and [to_ref] and uses shmig"
+            echo "        to migrate the database to that anscestor"
+            echo
+            echo "OPTIONS"
+            echo "        --repo-root|-r"
+            echo "            Optional. The repo in which to operate this command. If not supplied, the command moves"
+            echo "            up from the current working directory trying to find a .git directory."
+            echo
+        ;;
+    esac
 done
-if [ ! -e "$PWD/.git" ]; then
-    >&2 echo "E: $me: Couldn't find repo root. (No .git directory.) You must call this from within a git repo."
-    exit 11
+shift $(($OPTIND - 1))
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --repo-root|-r)
+            ROOT="$2"
+            shift
+        ;;
+
+        *)
+            if [ -z "$from_ref" ]; then
+                from_ref="$1"
+                shift
+            elif [ -z "$to_ref" ]; then
+                to_ref="$1"
+                shift
+            else
+                >&2 echo "E: $me: Invalid extra arguments found '$@'"
+                exit 14
+            fi
+        ;;
+    esac
+done
+
+
+# Find repo root, if not given
+if [ -z "$ROOT" ]; then
+    ROOT="$PWD"
+    while [ "$ROOT" != "/" ] && [ ! -e "$ROOT/.git" ]; do
+        ROOT="$(readlink -f "$ROOT/..")"
+    done
+    if [ ! -e "$ROOT/.git" ]; then
+        >&2 echo "E: $me: Couldn't find repo root. (No .git directory.) You must call this from within a git repo"
+        >&2 echo "   or pass the --repo-root|-r flag"
+        exit 11
+    fi
 fi
 
-# Make sure argument is a valid git ref
-if [ -z "$1" ]; then
-    >&2 echo "E: $me: You must pass a valid git ref as the first argument to this script."
-    exit 12
-fi
-if ! ref="$(git rev-parse --symbolic --abbrev-ref "$1" 2>/dev/null)"; then
-    >&2 echo "E: $me: '$1' is not a valid ref for the git repo at '$(readlink -f .)'"
-    exit 13
-fi
-shift
-
-# Make sure there are no other arguments
-if [ -n "$1" ]; then
-    >&2 echo "E: $me: Invalid extra arguments found '$@'"
-    exit 14
-fi
+# Make sure arguments is a valid git refs
+for r in "$from_ref" "$to_ref"; do
+    if ! git rev-parse --symbolic --abbrev-ref "$r" &>/dev/null; then
+        >&2 echo "E: $me: '$r' is not a valid ref for the git repo at '$ROOT'"
+        exit 13
+    fi
+done
 
 # Check for shmig and general setup
 if [ ! -x db/shmig ]; then
@@ -58,14 +99,14 @@ else
 fi
 
 # Get migrations list from target ref
-if ! targ_migs="$("$showmigsforref" "$ref")"; then
-    >&2 echo "E: $me: CAN'T GET MIGRATIONS FOR REF '$ref'. Database migrations not being run."
+if ! targ_migs="$("$showmigsforref" "$to_ref")"; then
+    >&2 echo "E: $me: CAN'T GET MIGRATIONS FOR REF '$to_ref'"
     exit 16
 fi
 
 # Get migrations list from current branch
-if ! current_migs="$(cd db && ./shmig show)"; then
-    >&2 echo "E: $me: CAN'T GET CURRENT MIGRATIONS. Database migrations not being run."
+if ! current_migs="$("$showmigsforref" "$from_ref")"; then
+    >&2 echo "E: $me: CAN'T GET MIGRATIONS FOR REF '$from_ref'"
     exit 17
 fi
 
