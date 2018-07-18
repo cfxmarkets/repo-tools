@@ -22,6 +22,7 @@ while getopts h arg; do
             echo "            Optional. The repo in which to operate this command. If not supplied, the command moves"
             echo "            up from the current working directory trying to find a .git directory."
             echo
+            exit
         ;;
     esac
 done
@@ -86,14 +87,14 @@ if [ -e "db/shmig.local.conf" ]; then
     . db/shmig.local.conf
 fi
 
-# Find 'show-migrations-for-ref' command
+# Find 'shmig-show-migrations-for-ref' command
 OWNDIR="$(dirname "$(readlink -f "$0")")"
-if [ -e "$OWNDIR/show-migrations-for-ref" ]; then
-    showmigsforref="$OWNDIR/show-migrations-for-ref"
-elif command -v show-migrations-for-ref &>/dev/null; then
-    showmigsforref="show-migrations-for-ref"
+if [ -e "$OWNDIR/shmig-show-migrations-for-ref" ]; then
+    showmigsforref="$OWNDIR/shmig-show-migrations-for-ref"
+elif command -v shmig-show-migrations-for-ref &>/dev/null; then
+    showmigsforref="shmig-show-migrations-for-ref"
 else
-    >&2 echo "E: $me: Couldn't find script 'show-migrations-for-ref'. Searched on path and at"
+    >&2 echo "E: $me: Couldn't find script 'shmig-show-migrations-for-ref'. Searched on path and at"
     >&2 echo "   $OWNDIR/"
     exit 18
 fi

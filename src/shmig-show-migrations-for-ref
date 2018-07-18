@@ -1,0 +1,111 @@
+#!/bin/bash
+
+set -e
+
+me="$(basename "$0")"
+
+while getopts h arg; do
+    case "$arg" in
+        h)
+            echo "NAME"
+            echo "        $me - use shmig to list migrations for a particular branch of a git repository"
+            echo
+            echo "SYNOPSIS"
+            echo "        $me [options] [ref]"
+            echo
+            echo "DESCRIPTION"
+            echo "        Checks out [ref] into a temp directory and uses shmig to get a full list of available migrations."
+            echo "        The intended use for this in conjunction with \`migrate-to-common-anscestor\`."
+            echo
+            echo "OPTIONS"
+            echo "        --repo-root|-r"
+            echo "            Optional. The repo in which to operate this command. If not supplied, the command moves"
+            echo "            up from the current working directory trying to find a .git directory."
+            echo
+            exit
+        ;;
+    esac
+done
+shift $(($OPTIND - 1))
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --repo-root|-r)
+            ROOT="$2"
+            shift
+        ;;
+
+        *)
+            if [ -z "$ref" ]; then
+                ref="$1"
+                shift
+            else
+                >&2 echo "E: $me: Invalid extra arguments found '$@'"
+                exit 14
+            fi
+        ;;
+    esac
+done
+
+# Find repo root, if not given
+if [ -z "$ROOT" ]; then
+    ROOT="$PWD"
+    while [ "$ROOT" != "/" ] && [ ! -e "$ROOT/.git" ]; do
+        ROOT="$(readlink -f "$ROOT/..")"
+    done
+    if [ ! -e "$ROOT/.git" ]; then
+        >&2 echo "E: $me: Couldn't find repo root. (No .git directory.) You must call this from within a git repo"
+        >&2 echo "   or pass the --repo-root|-r flag"
+        exit 11
+    fi
+fi
+
+# Make sure argument is a valid git ref
+if [ -z "$1" ]; then
+    >&2 echo "E: $me: You must pass a valid git ref as the first argument to this script."
+    exit 12
+fi
+if ! ref="$(git rev-parse --symbolic --abbrev-ref "$1" 2>/dev/null)"; then
+    >&2 echo "E: $me: '$1' is not a valid ref for the git repo at '$(readlink -f .)'"
+    exit 13
+fi
+shift
+
+# Make sure there are no other arguments
+if [ -n "$1" ]; then
+    >&2 echo "E: $me: Invalid extra arguments found '$@'"
+    exit 14
+fi
+
+# Check for shmig and general setup
+if [ ! -e db/shmig ]; then
+    >&2 echo "E: $me: This script requires \`shmig\` database migration utility (https://github.com/cfxmarkets/shmig). \`shmig\` should"
+    >&2 echo "   be symlinked to db/shmig and configured to point to the correct migrations."
+    exit 15
+fi
+
+# Include shmig configs
+if [ -e "db/shmig.conf" ]; then
+    . db/shmig.conf
+fi
+if [ -e "db/shmig.local.conf" ]; then
+    . db/shmig.local.conf
+fi
+
+# Checkout the db tree for the target
+d="/tmp/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13)"
+mkdir -p "$d"
+GIT_WORK_TREE="$d" git checkout "$ref" -- db
+
+# show migrations from target
+cd db
+if ./shmig -m "$d/db/$MIGRATIONS" show; then
+    RET=0
+else
+    RET="$?"
+fi
+
+rm -Rf "$d"
+
+exit "$RET"
+
