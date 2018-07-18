@@ -1,0 +1,109 @@
+#!/bin/bash
+
+set -e
+
+me="$(basename "$0")"
+
+# Find repo root
+while [ "$PWD" != "/" ] && [ ! -e "$PWD/.git" ]; do
+    cd ../
+done
+if [ ! -e "$PWD/.git" ]; then
+    >&2 echo "E: $me: Couldn't find repo root. (No .git directory.) You must call this from within a git repo."
+    exit 11
+fi
+
+# Make sure argument is a valid git ref
+if [ -z "$1" ]; then
+    >&2 echo "E: $me: You must pass a valid git ref as the first argument to this script."
+    exit 12
+fi
+if ! ref="$(git rev-parse --symbolic --abbrev-ref "$1" 2>/dev/null)"; then
+    >&2 echo "E: $me: '$1' is not a valid ref for the git repo at '$(readlink -f .)'"
+    exit 13
+fi
+shift
+
+# Make sure there are no other arguments
+if [ -n "$1" ]; then
+    >&2 echo "E: $me: Invalid extra arguments found '$@'"
+    exit 14
+fi
+
+# Check for shmig and general setup
+if [ ! -x db/shmig ]; then
+    >&2 echo "E: $me: This script requires \`shmig\` database migration utility (https://github.com/cfxmarkets/shmig). \`shmig\` should"
+    >&2 echo "   be symlinked to db/shmig and configured to point to the correct migrations."
+    exit 15
+fi
+
+# Include shmig configs
+if [ -e "db/shmig.conf" ]; then
+    . db/shmig.conf
+fi
+if [ -e "db/shmig.local.conf" ]; then
+    . db/shmig.local.conf
+fi
+
+# Find 'show-migrations-for-ref' command
+OWNDIR="$(dirname "$(readlink -f "$0")")"
+if [ -e "$OWNDIR/show-migrations-for-ref" ]; then
+    showmigsforref="$OWNDIR/show-migrations-for-ref"
+elif command -v show-migrations-for-ref &>/dev/null; then
+    showmigsforref="show-migrations-for-ref"
+else
+    >&2 echo "E: $me: Couldn't find script 'show-migrations-for-ref'. Searched on path and at"
+    >&2 echo "   $OWNDIR/"
+    exit 18
+fi
+
+# Get migrations list from target ref
+if ! targ_migs="$("$showmigsforref" "$ref")"; then
+    >&2 echo "E: $me: CAN'T GET MIGRATIONS FOR REF '$ref'. Database migrations not being run."
+    exit 16
+fi
+
+# Get migrations list from current branch
+if ! current_migs="$(cd db && ./shmig show)"; then
+    >&2 echo "E: $me: CAN'T GET CURRENT MIGRATIONS. Database migrations not being run."
+    exit 17
+fi
+
+# Find the common anscestor
+i=1
+targ="$(echo "$current_migs" | wc -l)"
+while IFS= read -r -d $'\n' m; do
+    m="$(basename "$m")"
+    # If we still have target migrations to check, then if the names don't match, this is our break point
+    if [ "$(echo "$targ_migs" | wc -l)" -lt "$i" ] || [ "$m" != "$(basename "$(echo "$targ_migs" | sed "${i}q;d")")" ]; then
+        targ=$(($i - 1))
+        break
+    fi
+    !((i++))
+done < <(echo "$current_migs")
+
+# Determine how to migrate
+# Migrate only if we found a difference in the migration stacks
+RET=0
+if [ ! "$targ" -eq "$(echo "$current_migs" | wc -l)" ]; then
+    cd db
+    # Making this an array so it handles turning into command arguments well
+    till=()
+
+    # If there was at least one commonality, migrate down to that
+    if [ "$targ" -gt 0 ]; then
+        targ="$(echo "$targ_migs" | sed "${targ}q;d")"
+        echo "Migrating down to $targ"
+        targ="$(echo "$targ" | sed -r 's/^([^-]+)-.*$/\1/')"
+        till+=("till=$targ")
+    fi
+    if ./shmig down "${till[@]}"; then
+        RET=0
+    else
+        RET="$?"
+        >&2 echo "E: $me: Couldn't perform migration."
+    fi
+fi
+
+exit "$RET"
+
