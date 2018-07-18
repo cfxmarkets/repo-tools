@@ -3,5 +3,9 @@
     "description": "A small set of tools to help manage repositories, such as database migration tools, etc. NOTE: Because these tools encompass a wide range of uses, we've decided not to declare their dependencies explicitly. Rather, these dependencies are _suggested,_ such that people who need them may easily find and download them, while those who don't won't need to incorporate excess code.",
     "suggest": {
         "mbucc/shmig": "This is necessary for using the database-related utilities."
-    }
+    },
+    "bin": [
+        "src/shmig-migrate-to-common-anscestor",
+        "src/shmig-show-migrations-for-ref"
+    ]
 }
