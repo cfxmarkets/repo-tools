@@ -61,7 +61,7 @@ if [ -z "$ref" ]; then
     >&2 echo "E: $me: You must pass a valid git ref as the first argument to this script."
     exit 12
 fi
-if ! ref="$(git rev-parse --symbolic --abbrev-ref "$ref" 2>/dev/null)"; then
+if ! git rev-parse --symbolic --abbrev-ref "$ref" &>/dev/null; then
     >&2 echo "E: $me: '$1' is not a valid ref for the git repo at '$ROOT'"
     exit 13
 fi
@@ -81,17 +81,21 @@ if [ -e "db/shmig.local.conf" ]; then
     . db/shmig.local.conf
 fi
 
+# From here on, we don't want to exit directly because we always want to clean up first. Use RET as proxy
+RET=0
+
 # Checkout the db tree for the target
 d="/tmp/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13)"
 mkdir -p "$d"
-GIT_WORK_TREE="$d" git checkout "$ref" -- db
-
-# show migrations from target
-cd db
-if ./shmig -m "$d/db/$MIGRATIONS" show; then
-    RET=0
+if ! GIT_WORK_TREE="$d" git checkout "$ref" -- db; then
+    RET="${PIPESTATUS[0]}"
+    >&2 echo "E: $me: Couldn't check out ref '$ref'"
 else
-    RET="$?"
+    # show migrations from target
+    cd db
+    if ! ./shmig -m "$d/db/$MIGRATIONS" show; then
+        RET="${PIPESTATUS[0]}"
+    fi
 fi
 
 rm -Rf "$d"
