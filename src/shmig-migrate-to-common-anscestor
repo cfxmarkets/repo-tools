@@ -28,7 +28,7 @@ while [ "$#" -gt 0 ]; do
 
         --repo-root|-r)
             ROOT="$2"
-            shift
+            shift 2
         ;;
 
         *)
@@ -46,6 +46,8 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+# Get owndir before changing to root
+OWNDIR="$(dirname "$(readlink -f "$0")")"
 
 # Find repo root, if not given, then go to it
 if [ -z "$ROOT" ]; then
@@ -61,7 +63,7 @@ if [ -z "$ROOT" ]; then
 fi
 cd "$ROOT"
 
-# Make sure arguments is a valid git refs
+# Make sure arguments are valid git refs
 for r in "$from_ref" "$to_ref"; do
     if ! git rev-parse --symbolic --abbrev-ref "$r" &>/dev/null; then
         >&2 echo "E: $me: '$r' is not a valid ref for the git repo at '$ROOT'"
@@ -85,7 +87,6 @@ if [ -e "db/shmig.local.conf" ]; then
 fi
 
 # Find 'shmig-show-migrations-for-ref' command
-OWNDIR="$(dirname "$(readlink -f "$0")")"
 if [ -e "$OWNDIR/shmig-show-migrations-for-ref" ]; then
     showmigsforref="$OWNDIR/shmig-show-migrations-for-ref"
 elif command -v shmig-show-migrations-for-ref &>/dev/null; then
@@ -102,15 +103,17 @@ if ! targ_migs="$("$showmigsforref" "$to_ref")"; then
     exit 16
 fi
 
-# Get migrations list from current branch
-if ! current_migs="$("$showmigsforref" "$from_ref")"; then
+# Get migrations list from 'from' ref
+from_db_dir="/tmp/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13)"
+if ! from_migs="$("$showmigsforref" --tmp-dir "$from_db_dir" --no-cleanup "$from_ref")"; then
     >&2 echo "E: $me: CAN'T GET MIGRATIONS FOR REF '$from_ref'"
+    rm -Rf "$from_db_dir"
     exit 17
 fi
 
 # Find the common anscestor
 i=1
-targ="$(echo "$current_migs" | wc -l)"
+targ="$(echo "$from_migs" | wc -l)"
 while IFS= read -r -d $'\n' m; do
     m="$(basename "$m")"
     # If we still have target migrations to check, then if the names don't match, this is our break point
@@ -119,12 +122,12 @@ while IFS= read -r -d $'\n' m; do
         break
     fi
     !((i++))
-done < <(echo "$current_migs")
+done < <(echo "$from_migs")
 
 # Determine how to migrate
 # Migrate only if we found a difference in the migration stacks
 RET=0
-if [ ! "$targ" -eq "$(echo "$current_migs" | wc -l)" ]; then
+if [ ! "$targ" -eq "$(echo "$from_migs" | wc -l)" ]; then
     cd db
     # Making this an array so it handles turning into command arguments well
     till=()
@@ -136,13 +139,19 @@ if [ ! "$targ" -eq "$(echo "$current_migs" | wc -l)" ]; then
         targ="$(echo "$targ" | sed -r 's/^([^-]+)-.*$/\1/')"
         till+=("till=$targ")
     fi
-    if ./shmig down "${till[@]}"; then
+
+    # Get shmig migrations directory
+    sc="$ROOT/db/shmig"
+    migdir="$([ -e "$sc.conf" ] && . "$sc.conf"; [ -e "$sc.local.conf" ] && . "$sc.local.conf"; echo "$MIGRATIONS")"
+    if ./shmig -m "$from_db_dir/db/$migdir" down "${till[@]}"; then
         RET=0
     else
         RET="$?"
         >&2 echo "E: $me: Couldn't perform migration."
     fi
 fi
+
+rm -Rf "$from_db_dir"
 
 exit "$RET"
 

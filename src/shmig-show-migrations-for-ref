@@ -20,14 +20,32 @@ function show_usage() {
     echo "            Optional. The repo in which to operate this command. If not supplied, the command moves"
     echo "            up from the current working directory trying to find a .git directory."
     echo
+    echo "        --tmp-dir|-t"
+    echo "            Optional. The path to the directory to use as a temp directory. If none provided, a random"
+    echo "            temp directory will be created under /tmp/."
+    echo
+    echo "        --no-cleanup|-n"
+    echo "            Optional. Don't delete the temporary directory."
+    echo
 }
 
+CLEANUP="true"
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --help|-h) show_usage && exit ;;
         --repo-root|-r)
             ROOT="$2"
             shift 2
+        ;;
+
+        --tmp-dir|-t)
+            TMPDIR="$2"
+            shift 2
+        ;;
+
+        --no-cleanup|-n)
+            CLEANUP="false"
+            shift
         ;;
 
         *)
@@ -85,20 +103,24 @@ fi
 RET=0
 
 # Checkout the db tree for the target
-d="/tmp/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13)"
-mkdir -p "$d"
-if ! GIT_WORK_TREE="$d" git checkout "$ref" -- db; then
+if [ -z "$TMPDIR" ]; then
+    TMPDIR="/tmp/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13)"
+fi
+mkdir -p "$TMPDIR"
+if ! GIT_WORK_TREE="$TMPDIR" git checkout "$ref" -- db; then
     RET="${PIPESTATUS[0]}"
     >&2 echo "E: $me: Couldn't check out ref '$ref'"
 else
     # show migrations from target
     cd db
-    if ! ./shmig -m "$d/db/$MIGRATIONS" show; then
+    if ! ./shmig -m "$TMPDIR/db/$MIGRATIONS" show; then
         RET="${PIPESTATUS[0]}"
     fi
 fi
 
-rm -Rf "$d"
+if [ "$CLEANUP" == "true" ]; then
+    rm -Rf "$TMPDIR"
+fi
 
 exit "$RET"
 
