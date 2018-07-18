@@ -13,7 +13,7 @@ function show_usage() {
     echo
     echo "DESCRIPTION"
     echo "        Checks out [ref] into a temp directory and uses shmig to get a full list of available migrations."
-    echo "        The intended use for this in conjunction with \`migrate-to-common-anscestor\`."
+    echo "        The intended use for this in conjunction with \`migrate-to-common-ancestor\`."
     echo
     echo "OPTIONS"
     echo "        --repo-root|-r"

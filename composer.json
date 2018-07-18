@@ -5,7 +5,7 @@
         "mbucc/shmig": "This is necessary for using the database-related utilities."
     },
     "bin": [
-        "src/shmig-migrate-to-common-anscestor",
+        "src/shmig-migrate-to-common-ancestor",
         "src/shmig-show-migrations-for-ref"
     ]
 }

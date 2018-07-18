@@ -6,14 +6,14 @@ me="$(basename "$0")"
 
 function show_usage() {
     echo "NAME"
-    echo "        $me - use shmig to migrate the database of a repository to the common anscestor of two refs"
+    echo "        $me - use shmig to migrate the database of a repository to the common ancestor of two refs"
     echo
     echo "SYNOPSIS"
     echo "        $me [options] [from_ref] [to_ref]"
     echo
     echo "DESCRIPTION"
-    echo "        Finds the common database migration anscestor between [from_ref] and [to_ref] and uses shmig"
-    echo "        to migrate the database to that anscestor"
+    echo "        Finds the common database migration ancestor between [from_ref] and [to_ref] and uses shmig"
+    echo "        to migrate the database to that ancestor"
     echo
     echo "OPTIONS"
     echo "        --repo-root|-r"
@@ -111,7 +111,7 @@ if ! from_migs="$("$showmigsforref" --tmp-dir "$from_db_dir" --no-cleanup "$from
     exit 17
 fi
 
-# Find the common anscestor
+# Find the common ancestor
 i=1
 targ="$(echo "$from_migs" | wc -l)"
 while IFS= read -r -d $'\n' m; do

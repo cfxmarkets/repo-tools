@@ -19,26 +19,33 @@ SYNOPSIS
 
 DESCRIPTION
         Checks out [ref] into a temp directory and uses shmig to get a full list of available migrations.
-        The intended use for this in conjunction with `migrate-to-common-anscestor`.
+        The intended use for this in conjunction with `migrate-to-common-ancestor`.
 
 OPTIONS
         --repo-root|-r
             Optional. The repo in which to operate this command. If not supplied, the command moves
             up from the current working directory trying to find a .git directory.
+
+        --tmp-dir|-t
+            Optional. The path to the directory to use as a temp directory. If none provided, a random
+            temp directory will be created under /tmp/.
+
+        --no-cleanup|-n
+            Optional. Don't delete the temporary directory.
 ```
 
-### `shmig-migrate-to-common-anscestor`
+### `shmig-migrate-to-common-ancestor`
 
 ```sh
 NAME
-        shmig-migrate-to-common-anscestor - use shmig to migrate the database of a repository to the common anscestor of two refs
+        shmig-migrate-to-common-ancestor - use shmig to migrate the database of a repository to the common ancestor of two refs
 
 SYNOPSIS
-        shmig-migrate-to-common-anscestor [options] [from_ref] [to_ref]
+        shmig-migrate-to-common-ancestor [options] [from_ref] [to_ref]
 
 DESCRIPTION
-        Finds the common database migration anscestor between [from_ref] and [to_ref] and uses shmig
-        to migrate the database to that anscestor
+        Finds the common database migration ancestor between [from_ref] and [to_ref] and uses shmig
+        to migrate the database to that ancestor
 
 OPTIONS
         --repo-root|-r
