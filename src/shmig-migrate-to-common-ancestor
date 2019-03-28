@@ -20,6 +20,10 @@ function show_usage() {
     echo "            Optional. The repo in which to operate this command. If not supplied, the command moves"
     echo "            up from the current working directory trying to find a .git directory."
     echo
+    echo "        --db-dir|-d"
+    echo "            Optional. The directory in which to find the shmig config files and the"
+    echo "            migrations (relative to the repo root)"
+    echo
 }
 
 while [ "$#" -gt 0 ]; do
@@ -28,6 +32,11 @@ while [ "$#" -gt 0 ]; do
 
         --repo-root|-r)
             ROOT="$2"
+            shift 2
+        ;;
+
+        --db-dir|-d)
+            RELDBDIR="$2"
             shift 2
         ;;
 
@@ -63,6 +72,12 @@ if [ -z "$ROOT" ]; then
 fi
 cd "$ROOT"
 
+# Get db dir, if not set
+if [ -z "$RELDBDIR" ]; then
+    RELDBDIR=db
+fi
+DBDIR="$(readlink -f "$RELDBDIR")"
+
 # Make sure arguments are valid git refs
 for r in "$from_ref" "$to_ref"; do
     if ! git rev-parse --symbolic --abbrev-ref "$r" &>/dev/null; then
@@ -72,18 +87,23 @@ for r in "$from_ref" "$to_ref"; do
 done
 
 # Check for shmig and general setup
-if [ ! -x db/shmig ]; then
-    >&2 echo "E: $me: This script requires \`shmig\` database migration utility (https://github.com/cfxmarkets/shmig). \`shmig\` should"
-    >&2 echo "   be symlinked to db/shmig and configured to point to the correct migrations."
+if [ -x "$DBDIR"/shmig ]; then
+    shmigcmd="$DBDIR/shmig"
+elif command -v shmig &>/dev/null; then
+    shmigcmd="shmig"
+else
+    >&2 echo "E: $me: This script requires CFX's fork of the \`shmig\` database migration utility"
+    >&2 echo "   (https://github.com/cfxmarkets/shmig). \`shmig\` should either be installed"
+    >&2 echo "   in your path, or installed locally at \`$DBDIR/shmig\`"
     exit 15
 fi
 
 # Include shmig configs
-if [ -e "db/shmig.conf" ]; then
-    . db/shmig.conf
+if [ -e "$DBDIR/shmig.conf" ]; then
+    . "$DBDIR"/shmig.conf
 fi
-if [ -e "db/shmig.local.conf" ]; then
-    . db/shmig.local.conf
+if [ -e "$DBDIR/shmig.local.conf" ]; then
+    . "$DBDIR"/shmig.local.conf
 fi
 
 # Find 'shmig-show-migrations-for-ref' command
@@ -98,14 +118,14 @@ else
 fi
 
 # Get migrations list from target ref
-if ! targ_migs="$("$showmigsforref" "$to_ref")"; then
+if ! targ_migs="$("$showmigsforref" --repo-root "$ROOT" --db-dir "$RELDBDIR" "$to_ref")"; then
     >&2 echo "E: $me: CAN'T GET MIGRATIONS FOR REF '$to_ref'"
     exit 16
 fi
 
 # Get migrations list from 'from' ref
 from_db_dir="/tmp/$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13)"
-if ! from_migs="$("$showmigsforref" --tmp-dir "$from_db_dir" --no-cleanup "$from_ref")"; then
+if ! from_migs="$("$showmigsforref" --tmp-dir "$from_db_dir" --db-dir "$RELDBDIR" --no-cleanup "$from_ref")"; then
     >&2 echo "E: $me: CAN'T GET MIGRATIONS FOR REF '$from_ref'"
     rm -Rf "$from_db_dir"
     exit 17
@@ -128,7 +148,7 @@ done < <(echo "$from_migs")
 # Migrate only if we found a difference in the migration stacks
 RET=0
 if [ ! "$targ" -eq "$(echo "$from_migs" | wc -l)" ]; then
-    cd db
+    cd "$DBDIR"
     # Making this an array so it handles turning into command arguments well
     till=()
 
@@ -141,9 +161,9 @@ if [ ! "$targ" -eq "$(echo "$from_migs" | wc -l)" ]; then
     fi
 
     # Get shmig migrations directory
-    sc="$ROOT/db/shmig"
+    sc="$DBDIR/shmig"
     migdir="$([ -e "$sc.conf" ] && . "$sc.conf"; [ -e "$sc.local.conf" ] && . "$sc.local.conf"; echo "$MIGRATIONS")"
-    if ./shmig -m "$from_db_dir/db/$migdir" down "${till[@]}"; then
+    if "$shmigcmd" -m "$from_db_dir/$RELDBDIR/$migdir" down "${till[@]}"; then
         RET=0
     else
         RET="$?"
