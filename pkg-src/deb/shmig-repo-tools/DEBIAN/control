@@ -1,0 +1,18 @@
+Package: shmig-repo-tools
+Version: ::VERSION::
+Section: free
+Priority: optional
+Architecture: all
+Depends: shmig (>= 1.1.0)
+Installed-Size: 4
+Maintainer: CFX Tech Staff <cfx-tech-staff@cfxtrading.com>
+Description: A set of tools for managing database migrations on branch checkout in a git repo
+ This package provides shell scripts that use the shmig db migration system to ensure that
+ database state is always correct for the given branch. **NOTE:** These scripts should be
+ used from a git hook (usually `post-checkout`) to make sure they do their work. A typical
+ use in a `post-checkout` script would be something like this:
+ .
+ if [ "$1" == "$2" ]; then exit; fi
+ shmig-migrate-to-common-ancestor "$1" "$2"
+ cd db
+ shmig up
